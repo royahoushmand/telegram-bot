@@ -1,27 +1,42 @@
+import logging
+import openai
+import os
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
+from dotenv import load_dotenv
 
-TOKEN = "7592422208:AAEgrZ09KpWltyJDMyqGutb6dgovii8T-xM"
+# بارگذاری متغیرهای محیطی از فایل .env
+load_dotenv()
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("سلام! من ربات جدید شما هستم 🤖\nدستور /help رو امتحان کن!")
+# خواندن توکن‌ها و کلیدها به صورت امن از متغیرهای محیطی
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("من می‌تونم پیام‌هات رو دریافت و تکرار کنم!")
+# فعال‌سازی لاگ‌ها برای دیباگ و مانیتورینگ
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 
-async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
-    await update.message.reply_text(f"شما گفتید: {user_message}")
 
-def main():
-    app = ApplicationBuilder().token(TOKEN).build()
+    try:
+        # ارسال پیام کاربر به OpenAI ChatGPT و دریافت پاسخ
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "user", "content": user_message}
+            ]
+        )
+        reply = response["choices"][0]["message"]["content"]
+        await update.message.reply_text(reply)
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), echo))
-
-    print("ربات در حال اجرا است...")
-    app.run_polling()
+    except Exception as e:
+        await update.message.reply_text("❌ خطایی در پاسخ‌دهی از ChatGPT پیش آمد.")
+        logging.error(f"Error: {e}")
 
 if __name__ == '__main__':
-    main()
+    app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+    app.run_polling()
